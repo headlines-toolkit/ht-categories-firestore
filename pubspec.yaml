@@ -1,5 +1,5 @@
 name: ht_categories_firestore
-description: A Very Good Project created by Very Good CLI.
+description: A Firestore implementation of the HtCategoriesClient interface, providing CRUD operations for categories using Cloud Firestore.
 repository: https://github.com/headlines-toolkit/ht-categories-firestore
 publish_to: none
 
@@ -8,6 +8,7 @@ environment:
   flutter: ^3.24.0
 
 dependencies:
+  cloud_firestore: ^5.6.6
   flutter:
     sdk: flutter
   ht_categories_client:
