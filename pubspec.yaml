@@ -1,0 +1,21 @@
+name: ht_categories_firestore
+description: A Very Good Project created by Very Good CLI.
+repository: https://github.com/headlines-toolkit/ht-categories-firestore
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+  flutter: ^3.24.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ht_categories_client:
+    git:
+      url: https://github.com/headlines-toolkit/ht-categories-client.git
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mocktail: ^1.0.4
+  very_good_analysis: ^7.0.0
