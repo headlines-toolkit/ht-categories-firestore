@@ -111,10 +111,7 @@ void main() {
         when(() => mockQuery.get()).thenAnswer((_) async => mockQuerySnapshot);
       }
 
-      setUp(() {
-        // Setup default mocks for query chaining before each test
-        setupDefaultQueryMocks();
-      });
+      setUp(setupDefaultQueryMocks);
       // --- End Test Setup Helper ---
 
       test('returns list of categories on success (no pagination)', () async {
@@ -170,14 +167,16 @@ void main() {
         when(mockDoc1.data).thenReturn(categoryMap1);
 
         // Act
-        final categories = await categoriesFirestore.getCategories(limit: testLimit);
+        final categories =
+            await categoriesFirestore.getCategories(limit: testLimit);
 
         // Assert
         expect(categories.length, 1);
         expect(categories.first, category1);
         verify(() => mockCollectionRef.orderBy('name', descending: false))
             .called(1);
-        verify(() => mockQuery.limit(testLimit)).called(1); // Verify limit applied
+        verify(() => mockQuery.limit(testLimit))
+            .called(1); // Verify limit applied
         verify(() => mockQuery.get()).called(1);
         verifyNever(() => mockQuery.startAfterDocument(any()));
       });
@@ -187,12 +186,13 @@ void main() {
         final startAfterDocId = category1.id;
         final mockStartAfterDocRef = MockDocumentReference();
         final mockStartAfterSnapshot = MockDocumentSnapshot();
-        final mockResultDoc = MockQueryDocumentSnapshot(); // Doc after category1
+        final mockResultDoc =
+            MockQueryDocumentSnapshot(); // Doc after category1
 
         // Mock fetching the startAfter document
         when(() => mockCollectionRef.doc(startAfterDocId))
             .thenReturn(mockStartAfterDocRef);
-        when(() => mockStartAfterDocRef.get())
+        when(mockStartAfterDocRef.get)
             .thenAnswer((_) async => mockStartAfterSnapshot);
         when(() => mockStartAfterSnapshot.exists).thenReturn(true);
 
@@ -206,8 +206,8 @@ void main() {
         when(mockResultDoc.data).thenReturn(categoryMap2);
 
         // Act
-        final categories =
-            await categoriesFirestore.getCategories(startAfterId: startAfterDocId);
+        final categories = await categoriesFirestore.getCategories(
+            startAfterId: startAfterDocId,);
 
         // Assert
         expect(categories.length, 1);
@@ -215,7 +215,7 @@ void main() {
         verify(() => mockCollectionRef.orderBy('name', descending: false))
             .called(1);
         verify(() => mockCollectionRef.doc(startAfterDocId)).called(1);
-        verify(() => mockStartAfterDocRef.get()).called(1);
+        verify(mockStartAfterDocRef.get).called(1);
         verify(() => mockQuery.startAfterDocument(mockStartAfterSnapshot))
             .called(1);
         verify(() => mockQuery.get()).called(1);
@@ -234,9 +234,10 @@ void main() {
         // Mock fetching the startAfter document (it doesn't exist)
         when(() => mockCollectionRef.doc(nonExistentId))
             .thenReturn(mockStartAfterDocRef);
-        when(() => mockStartAfterDocRef.get())
+        when(mockStartAfterDocRef.get)
             .thenAnswer((_) async => mockStartAfterSnapshot);
-        when(() => mockStartAfterSnapshot.exists).thenReturn(false); // Not found
+        when(() => mockStartAfterSnapshot.exists)
+            .thenReturn(false); // Not found
 
         // Mock the final query result (should return from beginning)
         when(() => mockQuerySnapshot.docs).thenReturn([mockDoc1]);
@@ -244,8 +245,8 @@ void main() {
         when(mockDoc1.data).thenReturn(categoryMap1);
 
         // Act
-        final categories =
-            await categoriesFirestore.getCategories(startAfterId: nonExistentId);
+        final categories = await categoriesFirestore.getCategories(
+            startAfterId: nonExistentId,);
 
         // Assert
         expect(categories.length, 1);
@@ -253,7 +254,7 @@ void main() {
         verify(() => mockCollectionRef.orderBy('name', descending: false))
             .called(1);
         verify(() => mockCollectionRef.doc(nonExistentId)).called(1);
-        verify(() => mockStartAfterDocRef.get()).called(1);
+        verify(mockStartAfterDocRef.get).called(1);
         // Crucially, verify startAfterDocument was NEVER called
         verifyNever(() => mockQuery.startAfterDocument(any()));
         verify(() => mockQuery.get()).called(1);
@@ -266,12 +267,13 @@ void main() {
         final startAfterDocId = category1.id;
         final mockStartAfterDocRef = MockDocumentReference();
         final mockStartAfterSnapshot = MockDocumentSnapshot();
-        final mockResultDoc = MockQueryDocumentSnapshot(); // Doc after category1
+        final mockResultDoc =
+            MockQueryDocumentSnapshot(); // Doc after category1
 
         // Mock fetching startAfter doc
         when(() => mockCollectionRef.doc(startAfterDocId))
             .thenReturn(mockStartAfterDocRef);
-        when(() => mockStartAfterDocRef.get())
+        when(mockStartAfterDocRef.get)
             .thenAnswer((_) async => mockStartAfterSnapshot);
         when(() => mockStartAfterSnapshot.exists).thenReturn(true);
 
@@ -297,7 +299,7 @@ void main() {
         verify(() => mockCollectionRef.orderBy('name', descending: false))
             .called(1);
         verify(() => mockCollectionRef.doc(startAfterDocId)).called(1);
-        verify(() => mockStartAfterDocRef.get()).called(1);
+        verify(mockStartAfterDocRef.get).called(1);
         verify(() => mockQuery.limit(testLimit)).called(1);
         verify(() => mockQuery.startAfterDocument(mockStartAfterSnapshot))
             .called(1);
@@ -336,11 +338,12 @@ void main() {
         // Mock fetching the startAfter document to throw
         when(() => mockCollectionRef.doc(startAfterDocId))
             .thenReturn(mockStartAfterDocRef);
-        when(() => mockStartAfterDocRef.get()).thenThrow(exception);
+        when(mockStartAfterDocRef.get).thenThrow(exception);
 
         // Act & Assert
         expect(
-          () => categoriesFirestore.getCategories(startAfterId: startAfterDocId),
+          () =>
+              categoriesFirestore.getCategories(startAfterId: startAfterDocId),
           // Check for the specific failure type and that the original error is wrapped
           throwsA(
             isA<GetCategoriesFailure>().having(
@@ -355,7 +358,7 @@ void main() {
         verify(() => mockCollectionRef.orderBy('name', descending: false))
             .called(1);
         verify(() => mockCollectionRef.doc(startAfterDocId)).called(1);
-        verify(() => mockStartAfterDocRef.get()).called(1);
+        verify(mockStartAfterDocRef.get).called(1);
         // Verify the main query get() was not reached
         verifyNever(() => mockQuery.get());
       });

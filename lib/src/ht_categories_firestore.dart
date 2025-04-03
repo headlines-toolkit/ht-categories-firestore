@@ -95,7 +95,7 @@ class HtCategoriesFirestore implements HtCategoriesClient {
   }) async {
     try {
       // Start with the base query, ordered by name for consistent pagination
-      Query<Map<String, dynamic>> query =
+      var query =
           _collection.orderBy('name', descending: false);
 
       // Handle pagination: fetch the document to start after
