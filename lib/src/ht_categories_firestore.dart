@@ -22,9 +22,8 @@ class HtCategoriesFirestore implements HtCategoriesClient {
   /// {@macro ht_categories_firestore}
   ///
   /// Requires a [FirebaseFirestore] instance.
-  const HtCategoriesFirestore({
-    required FirebaseFirestore firestore,
-  }) : _firestore = firestore;
+  const HtCategoriesFirestore({required FirebaseFirestore firestore})
+    : _firestore = firestore;
 
   final FirebaseFirestore _firestore;
   static const String _categoriesCollection = 'categories';
@@ -95,8 +94,7 @@ class HtCategoriesFirestore implements HtCategoriesClient {
   }) async {
     try {
       // Start with the base query, ordered by name for consistent pagination
-      var query =
-          _collection.orderBy('name', descending: false);
+      var query = _collection.orderBy('name', descending: false);
 
       // Handle pagination: fetch the document to start after
       if (startAfterId != null) {
