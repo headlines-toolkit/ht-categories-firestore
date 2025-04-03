@@ -23,7 +23,7 @@ class HtCategoriesFirestore implements HtCategoriesClient {
   ///
   /// Requires a [FirebaseFirestore] instance.
   const HtCategoriesFirestore({required FirebaseFirestore firestore})
-    : _firestore = firestore;
+      : _firestore = firestore;
 
   final FirebaseFirestore _firestore;
   static const String _categoriesCollection = 'categories';

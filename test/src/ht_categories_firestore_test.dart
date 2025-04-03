@@ -35,8 +35,7 @@ Category _createSampleCategory({
   String? iconUrl = 'http://example.com/icon.png',
 }) {
   return Category(
-    id:
-        id ??
+    id: id ??
         'test-id-${DateTime.now().microsecondsSinceEpoch}', // Ensure unique default ID
     name: name,
     description: description,
