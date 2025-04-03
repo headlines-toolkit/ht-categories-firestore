@@ -42,9 +42,20 @@ void main() async {
     );
     print('Created category: ${newCategory.id}');
 
-    // Get all categories
-    final categories = await categoriesClient.getCategories();
-    print('Fetched ${categories.length} categories.');
+    // Get all categories (demonstrating pagination)
+    final firstPageCategories = await categoriesClient.getCategories(limit: 10);
+    print('Fetched ${firstPageCategories.length} categories on the first page.');
+
+    String? lastCategoryId;
+    if (firstPageCategories.isNotEmpty) {
+      lastCategoryId = firstPageCategories.last.id;
+      // Get the next page of categories (if any)
+      final nextPageCategories = await categoriesClient.getCategories(
+        limit: 10,
+        startAfterId: lastCategoryId,
+      );
+      print('Fetched ${nextPageCategories.length} categories on the next page.');
+    }
 
     // Get a specific category
     final fetchedCategory = await categoriesClient.getCategory(newCategory.id);
