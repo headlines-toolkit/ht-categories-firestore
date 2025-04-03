@@ -89,19 +89,59 @@ class HtCategoriesFirestore implements HtCategoriesClient {
   }
 
   @override
-  Future<List<Category>> getCategories() async {
+  Future<List<Category>> getCategories({
+    int? limit,
+    String? startAfterId,
+  }) async {
     try {
-      final querySnapshot = await _collection.get();
+      // Start with the base query, ordered by name for consistent pagination
+      Query<Map<String, dynamic>> query =
+          _collection.orderBy('name', descending: false);
+
+      // Handle pagination: fetch the document to start after
+      if (startAfterId != null) {
+        try {
+          final startAfterSnapshot = await _collection.doc(startAfterId).get();
+          if (startAfterSnapshot.exists) {
+            query = query.startAfterDocument(startAfterSnapshot);
+          }
+          // If startAfterSnapshot doesn't exist, we don't add startAfterDocument.
+          // The query proceeds from the beginning (respecting the order).
+          // This handles cases where the startAfterId is invalid or deleted.
+        } on FirebaseException catch (e, s) {
+          // Treat failure to fetch the 'startAfter' doc as a general failure
+          throw GetCategoriesFailure(
+            'Failed to fetch document for pagination startAfterId: $startAfterId. Error: $e',
+            s,
+          );
+        } catch (e, s) {
+          throw GetCategoriesFailure(
+            'An unexpected error occurred while fetching document for pagination startAfterId: $startAfterId. Error: $e',
+            s,
+          );
+        }
+      }
+
+      // Apply limit if provided and valid
+      if (limit != null && limit > 0) {
+        query = query.limit(limit);
+      }
+
+      // Execute the final query
+      final querySnapshot = await query.get();
+
+      // Map documents to Category objects
       return querySnapshot.docs.map((doc) {
-        // Manually add the document ID to the data map before parsing
         final data = doc.data();
+        // Ensure the document ID is included before parsing
         data['id'] = doc.id;
         return Category.fromJson(data);
       }).toList();
     } on FirebaseException catch (e, s) {
+      // Catch Firestore errors during the main query execution
       throw GetCategoriesFailure(e, s);
     } catch (e, s) {
-      // Catch any other potential errors
+      // Catch any other potential errors during the process
       throw GetCategoriesFailure(e, s);
     }
   }
