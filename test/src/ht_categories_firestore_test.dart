@@ -15,6 +15,9 @@ class MockCollectionReference extends Mock
 class MockQuerySnapshot extends Mock
     implements QuerySnapshot<Map<String, dynamic>> {}
 
+// Add Mock for Query
+class MockQuery extends Mock implements Query<Map<String, dynamic>> {}
+
 class MockQueryDocumentSnapshot extends Mock
     implements QueryDocumentSnapshot<Map<String, dynamic>> {}
 
@@ -75,7 +78,11 @@ void main() {
         .thenReturn(mockCollectionRef);
     // Default stub for doc access (can be overridden in tests)
     when(() => mockCollectionRef.doc(any()))
-        .thenReturn(MockDocumentReference());
+        .thenReturn(MockDocumentReference()); // Default doc mock
+
+    // Register fallback values for chained query methods if needed
+    registerFallbackValue(MockQuery());
+    registerFallbackValue(MockDocumentSnapshot());
   });
 
   group('HtCategoriesFirestore', () {
@@ -84,16 +91,38 @@ void main() {
     });
 
     group('getCategories', () {
-      test('returns list of categories on success', () async {
+      // --- Test Setup Helper for getCategories ---
+      late MockQuery mockQuery;
+      late MockQuerySnapshot mockQuerySnapshot;
+
+      void setupDefaultQueryMocks() {
+        mockQuery = MockQuery();
+        mockQuerySnapshot = MockQuerySnapshot();
+
+        // Mock the initial orderBy call
+        when(() => mockCollectionRef.orderBy('name', descending: false))
+            .thenReturn(mockQuery);
+
+        // Mock chained calls returning the query itself by default
+        when(() => mockQuery.limit(any())).thenReturn(mockQuery);
+        when(() => mockQuery.startAfterDocument(any())).thenReturn(mockQuery);
+
+        // Mock the final get() call
+        when(() => mockQuery.get()).thenAnswer((_) async => mockQuerySnapshot);
+      }
+
+      setUp(() {
+        // Setup default mocks for query chaining before each test
+        setupDefaultQueryMocks();
+      });
+      // --- End Test Setup Helper ---
+
+      test('returns list of categories on success (no pagination)', () async {
         // Arrange
-        final mockSnapshot = MockQuerySnapshot();
         final mockDoc1 = MockQueryDocumentSnapshot();
         final mockDoc2 = MockQueryDocumentSnapshot();
 
-        when(() => mockCollectionRef.get())
-            .thenAnswer((_) async => mockSnapshot);
-        when(() => mockSnapshot.docs).thenReturn([mockDoc1, mockDoc2]);
-
+        when(() => mockQuerySnapshot.docs).thenReturn([mockDoc1, mockDoc2]);
         when(() => mockDoc1.id).thenReturn(category1.id);
         when(mockDoc1.data).thenReturn(categoryMap1);
         when(() => mockDoc2.id).thenReturn(category2.id);
@@ -105,31 +134,183 @@ void main() {
         // Assert
         expect(categories, isA<List<Category>>());
         expect(categories.length, 2);
-        // Use contains matcher for potentially unordered results
         expect(categories, contains(category1));
         expect(categories, contains(category2));
-        verify(() => mockCollectionRef.get()).called(1);
+        verify(() => mockCollectionRef.orderBy('name', descending: false))
+            .called(1);
+        verify(() => mockQuery.get()).called(1);
+        // Verify limit and startAfterDocument were NOT called
+        verifyNever(() => mockQuery.limit(any()));
+        verifyNever(() => mockQuery.startAfterDocument(any()));
       });
 
       test('returns empty list when no categories exist', () async {
         // Arrange
-        final mockSnapshot = MockQuerySnapshot();
-        when(() => mockCollectionRef.get())
-            .thenAnswer((_) async => mockSnapshot);
-        when(() => mockSnapshot.docs).thenReturn([]); // Empty list of docs
+        when(() => mockQuerySnapshot.docs).thenReturn([]); // Empty list
 
         // Act
         final categories = await categoriesFirestore.getCategories();
 
         // Assert
         expect(categories, isEmpty);
-        verify(() => mockCollectionRef.get()).called(1);
+        verify(() => mockCollectionRef.orderBy('name', descending: false))
+            .called(1);
+        verify(() => mockQuery.get()).called(1);
       });
 
-      test('throws GetCategoriesFailure on Firestore error', () async {
+      test('applies limit correctly', () async {
+        // Arrange
+        const testLimit = 1;
+        final mockDoc1 = MockQueryDocumentSnapshot();
+        // Mock query.limit() specifically
+        when(() => mockQuery.limit(testLimit)).thenReturn(mockQuery);
+        // Mock get() to return only one doc (as if limited)
+        when(() => mockQuerySnapshot.docs).thenReturn([mockDoc1]);
+        when(() => mockDoc1.id).thenReturn(category1.id);
+        when(mockDoc1.data).thenReturn(categoryMap1);
+
+        // Act
+        final categories = await categoriesFirestore.getCategories(limit: testLimit);
+
+        // Assert
+        expect(categories.length, 1);
+        expect(categories.first, category1);
+        verify(() => mockCollectionRef.orderBy('name', descending: false))
+            .called(1);
+        verify(() => mockQuery.limit(testLimit)).called(1); // Verify limit applied
+        verify(() => mockQuery.get()).called(1);
+        verifyNever(() => mockQuery.startAfterDocument(any()));
+      });
+
+      test('applies startAfterId correctly when document exists', () async {
+        // Arrange
+        final startAfterDocId = category1.id;
+        final mockStartAfterDocRef = MockDocumentReference();
+        final mockStartAfterSnapshot = MockDocumentSnapshot();
+        final mockResultDoc = MockQueryDocumentSnapshot(); // Doc after category1
+
+        // Mock fetching the startAfter document
+        when(() => mockCollectionRef.doc(startAfterDocId))
+            .thenReturn(mockStartAfterDocRef);
+        when(() => mockStartAfterDocRef.get())
+            .thenAnswer((_) async => mockStartAfterSnapshot);
+        when(() => mockStartAfterSnapshot.exists).thenReturn(true);
+
+        // Mock applying startAfterDocument
+        when(() => mockQuery.startAfterDocument(mockStartAfterSnapshot))
+            .thenReturn(mockQuery);
+
+        // Mock the final query result
+        when(() => mockQuerySnapshot.docs).thenReturn([mockResultDoc]);
+        when(() => mockResultDoc.id).thenReturn(category2.id);
+        when(mockResultDoc.data).thenReturn(categoryMap2);
+
+        // Act
+        final categories =
+            await categoriesFirestore.getCategories(startAfterId: startAfterDocId);
+
+        // Assert
+        expect(categories.length, 1);
+        expect(categories.first, category2); // Should return category2
+        verify(() => mockCollectionRef.orderBy('name', descending: false))
+            .called(1);
+        verify(() => mockCollectionRef.doc(startAfterDocId)).called(1);
+        verify(() => mockStartAfterDocRef.get()).called(1);
+        verify(() => mockQuery.startAfterDocument(mockStartAfterSnapshot))
+            .called(1);
+        verify(() => mockQuery.get()).called(1);
+        verifyNever(() => mockQuery.limit(any()));
+      });
+
+      test(
+          'does not apply startAfterDocument when startAfterId document does not exist',
+          () async {
+        // Arrange
+        const nonExistentId = 'non-existent-start-id';
+        final mockStartAfterDocRef = MockDocumentReference();
+        final mockStartAfterSnapshot = MockDocumentSnapshot();
+        final mockDoc1 = MockQueryDocumentSnapshot(); // Expecting first doc
+
+        // Mock fetching the startAfter document (it doesn't exist)
+        when(() => mockCollectionRef.doc(nonExistentId))
+            .thenReturn(mockStartAfterDocRef);
+        when(() => mockStartAfterDocRef.get())
+            .thenAnswer((_) async => mockStartAfterSnapshot);
+        when(() => mockStartAfterSnapshot.exists).thenReturn(false); // Not found
+
+        // Mock the final query result (should return from beginning)
+        when(() => mockQuerySnapshot.docs).thenReturn([mockDoc1]);
+        when(() => mockDoc1.id).thenReturn(category1.id);
+        when(mockDoc1.data).thenReturn(categoryMap1);
+
+        // Act
+        final categories =
+            await categoriesFirestore.getCategories(startAfterId: nonExistentId);
+
+        // Assert
+        expect(categories.length, 1);
+        expect(categories.first, category1); // Returns first category
+        verify(() => mockCollectionRef.orderBy('name', descending: false))
+            .called(1);
+        verify(() => mockCollectionRef.doc(nonExistentId)).called(1);
+        verify(() => mockStartAfterDocRef.get()).called(1);
+        // Crucially, verify startAfterDocument was NEVER called
+        verifyNever(() => mockQuery.startAfterDocument(any()));
+        verify(() => mockQuery.get()).called(1);
+        verifyNever(() => mockQuery.limit(any()));
+      });
+
+      test('applies limit and startAfterId correctly', () async {
+        // Arrange
+        const testLimit = 1;
+        final startAfterDocId = category1.id;
+        final mockStartAfterDocRef = MockDocumentReference();
+        final mockStartAfterSnapshot = MockDocumentSnapshot();
+        final mockResultDoc = MockQueryDocumentSnapshot(); // Doc after category1
+
+        // Mock fetching startAfter doc
+        when(() => mockCollectionRef.doc(startAfterDocId))
+            .thenReturn(mockStartAfterDocRef);
+        when(() => mockStartAfterDocRef.get())
+            .thenAnswer((_) async => mockStartAfterSnapshot);
+        when(() => mockStartAfterSnapshot.exists).thenReturn(true);
+
+        // Mock applying limit and startAfterDocument
+        when(() => mockQuery.limit(testLimit)).thenReturn(mockQuery);
+        when(() => mockQuery.startAfterDocument(mockStartAfterSnapshot))
+            .thenReturn(mockQuery);
+
+        // Mock final result
+        when(() => mockQuerySnapshot.docs).thenReturn([mockResultDoc]);
+        when(() => mockResultDoc.id).thenReturn(category2.id);
+        when(mockResultDoc.data).thenReturn(categoryMap2);
+
+        // Act
+        final categories = await categoriesFirestore.getCategories(
+          limit: testLimit,
+          startAfterId: startAfterDocId,
+        );
+
+        // Assert
+        expect(categories.length, 1);
+        expect(categories.first, category2);
+        verify(() => mockCollectionRef.orderBy('name', descending: false))
+            .called(1);
+        verify(() => mockCollectionRef.doc(startAfterDocId)).called(1);
+        verify(() => mockStartAfterDocRef.get()).called(1);
+        verify(() => mockQuery.limit(testLimit)).called(1);
+        verify(() => mockQuery.startAfterDocument(mockStartAfterSnapshot))
+            .called(1);
+        verify(() => mockQuery.get()).called(1);
+      });
+
+      test(
+          'throws GetCategoriesFailure on Firestore error during main query get',
+          () async {
         // Arrange
         final exception = _createFirebaseException('unavailable');
-        when(() => mockCollectionRef.get()).thenThrow(exception);
+        // Mock the final get() to throw
+        when(() => mockQuery.get()).thenThrow(exception);
 
         // Act & Assert
         expect(
@@ -139,7 +320,44 @@ void main() {
                 .having((e) => e.error, 'error', exception),
           ),
         );
-        verify(() => mockCollectionRef.get()).called(1);
+        verify(() => mockCollectionRef.orderBy('name', descending: false))
+            .called(1);
+        verify(() => mockQuery.get()).called(1);
+      });
+
+      test(
+          'throws GetCategoriesFailure on Firestore error during startAfterId document fetch',
+          () async {
+        // Arrange
+        final startAfterDocId = category1.id;
+        final mockStartAfterDocRef = MockDocumentReference();
+        final exception = _createFirebaseException('permission-denied');
+
+        // Mock fetching the startAfter document to throw
+        when(() => mockCollectionRef.doc(startAfterDocId))
+            .thenReturn(mockStartAfterDocRef);
+        when(() => mockStartAfterDocRef.get()).thenThrow(exception);
+
+        // Act & Assert
+        expect(
+          () => categoriesFirestore.getCategories(startAfterId: startAfterDocId),
+          // Check for the specific failure type and that the original error is wrapped
+          throwsA(
+            isA<GetCategoriesFailure>().having(
+              (e) => e.error.toString(), // Compare string representation
+              'error string',
+              contains(
+                'Failed to fetch document for pagination startAfterId: ${category1.id}',
+              ),
+            ),
+          ),
+        );
+        verify(() => mockCollectionRef.orderBy('name', descending: false))
+            .called(1);
+        verify(() => mockCollectionRef.doc(startAfterDocId)).called(1);
+        verify(() => mockStartAfterDocRef.get()).called(1);
+        // Verify the main query get() was not reached
+        verifyNever(() => mockQuery.get());
       });
     });
 
